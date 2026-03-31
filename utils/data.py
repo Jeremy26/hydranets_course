@@ -5,6 +5,7 @@ Dataset and DataLoader utilities for BDD100K
 import os
 import numpy as np
 import torch
+from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
@@ -24,7 +25,6 @@ class BDD100KDataset(Dataset):
         tasks: list of tasks to load, e.g. ['seg', 'depth', 'lanes']
         seg_root: separate root for segmentation masks (contains train/, val/)
         depth_root: separate root for depth maps (contains train/, val/, test/)
-        transform: optional additional transforms
     """
 
     def __init__(self, root_dir, split='train', tasks=None,
@@ -39,36 +39,29 @@ class BDD100KDataset(Dataset):
         if not os.path.exists(self.img_dir):
             self.img_dir = os.path.join(root_dir, 'images', '100k', split)
 
-        # Segmentation mask directory
-        if seg_root:
-            self.seg_dir = os.path.join(seg_root, split)
-        else:
-            self.seg_dir = os.path.join(root_dir, 'labels', 'sem_seg', 'masks', split)
-
-        # Depth — search all splits since depth dataset may split differently
+        # Seg/depth — search all splits since datasets may split differently
+        self.seg_root = seg_root or os.path.join(root_dir, 'labels', 'sem_seg', 'masks')
+        self.seg_splits = ['train', 'val', 'test']
         self.depth_root = depth_root or os.path.join(root_dir, 'labels', 'depth')
         self.depth_splits = ['train', 'val', 'test']
 
         # Lane segmentation directory
         self.lane_dir = os.path.join(root_dir, 'labels', 'lane', 'masks', split)
 
-        # Collect image filenames — only keep images that have ALL requested labels
-        all_filenames = sorted([
-            f for f in os.listdir(self.img_dir)
-            if f.endswith(('.jpg', '.png'))
-        ])
+        # Collect image filenames — handle flat or nested dirs (100k has subdirs)
+        all_files = sorted(Path(self.img_dir).rglob('*.jpg'))
+        self._img_paths = {p.stem: str(p) for p in all_files}
+
+        # Only keep images that have ALL requested labels
         self.filenames = []
-        for f in all_filenames:
-            basename = os.path.splitext(f)[0]
+        for basename in sorted(self._img_paths.keys()):
             keep = True
-            if 'seg' in self.tasks:
-                if not os.path.exists(os.path.join(self.seg_dir, basename + '_train_id.png')):
-                    keep = False
-            if 'depth' in self.tasks:
-                if not self._find_depth(basename):
-                    keep = False
+            if 'seg' in self.tasks and not self._find_seg(basename):
+                keep = False
+            if 'depth' in self.tasks and not self._find_depth(basename):
+                keep = False
             if keep:
-                self.filenames.append(f)
+                self.filenames.append(basename)
 
         # Standard image transforms
         self.img_transform = transforms.Compose([
@@ -77,8 +70,14 @@ class BDD100KDataset(Dataset):
             transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
         ])
 
+    def _find_seg(self, basename):
+        for split in self.seg_splits:
+            p = os.path.join(self.seg_root, split, basename + '_train_id.png')
+            if os.path.exists(p):
+                return p
+        return None
+
     def _find_depth(self, basename):
-        """Search all depth splits for this image."""
         for split in self.depth_splits:
             p = os.path.join(self.depth_root, split, basename + '.jpg')
             if os.path.exists(p):
@@ -89,18 +88,16 @@ class BDD100KDataset(Dataset):
         return len(self.filenames)
 
     def __getitem__(self, idx):
-        filename = self.filenames[idx]
-        basename = os.path.splitext(filename)[0]
-
-        img_path = os.path.join(self.img_dir, filename)
+        basename = self.filenames[idx]
+        img_path = self._img_paths[basename]
         image = Image.open(img_path).convert('RGB')
         image = self.img_transform(image)
 
         sample = {'image': image, 'filename': basename}
 
         if 'seg' in self.tasks:
-            seg_path = os.path.join(self.seg_dir, basename + '_train_id.png')
-            if os.path.exists(seg_path):
+            seg_path = self._find_seg(basename)
+            if seg_path:
                 seg = Image.open(seg_path)
                 seg = seg.resize((INPUT_SIZE[1], INPUT_SIZE[0]), Image.NEAREST)
                 seg = torch.from_numpy(np.array(seg)).long()
