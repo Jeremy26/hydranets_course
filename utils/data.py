@@ -37,10 +37,11 @@ class BDD100KDataset(Dataset):
         root_dir: path to BDD100K data root
         split: 'train' or 'val'
         tasks: list of tasks to load, e.g. ['seg', 'depth', 'lanes']
+        common_images: optional list of image basenames to include (filters to only these)
         transform: optional additional transforms
     """
 
-    def __init__(self, root_dir, split='train', tasks=None, transform=None):
+    def __init__(self, root_dir, split='train', tasks=None, common_images=None, transform=None):
         self.root_dir = root_dir
         self.split = split
         self.tasks = tasks or ['seg', 'depth']
@@ -52,10 +53,17 @@ class BDD100KDataset(Dataset):
             self.img_dir = os.path.join(root_dir, 'images', split)
 
         # Collect image filenames
-        self.filenames = sorted([
+        all_filenames = sorted([
             f for f in os.listdir(self.img_dir)
             if f.endswith(('.jpg', '.png'))
         ])
+
+        # Filter to common images if provided
+        if common_images is not None:
+            common_set = set(common_images)
+            self.filenames = [f for f in all_filenames if os.path.splitext(f)[0] in common_set or f in common_set]
+        else:
+            self.filenames = all_filenames
 
         # Segmentation mask directory
         self.seg_dir = os.path.join(root_dir, 'labels', 'sem_seg', 'masks', split)
@@ -133,7 +141,7 @@ class BDD100KDataset(Dataset):
         return sample
 
 
-def get_dataloaders(root_dir, tasks=None, batch_size=8, num_workers=2):
+def get_dataloaders(root_dir, tasks=None, batch_size=8, num_workers=2, common_images=None):
     """Create train and val dataloaders for BDD100K.
 
     Args:
@@ -141,12 +149,13 @@ def get_dataloaders(root_dir, tasks=None, batch_size=8, num_workers=2):
         tasks: list of tasks to load
         batch_size: batch size
         num_workers: number of data loading workers
+        common_images: optional list of image basenames to filter to
 
     Returns:
         train_loader, val_loader
     """
-    train_dataset = BDD100KDataset(root_dir, split='train', tasks=tasks)
-    val_dataset = BDD100KDataset(root_dir, split='val', tasks=tasks)
+    train_dataset = BDD100KDataset(root_dir, split='train', tasks=tasks, common_images=common_images)
+    val_dataset = BDD100KDataset(root_dir, split='val', tasks=tasks, common_images=common_images)
 
     train_loader = DataLoader(
         train_dataset,
