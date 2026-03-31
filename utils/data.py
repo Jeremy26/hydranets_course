@@ -49,8 +49,10 @@ class BDD100KDataset(Dataset):
         self.tasks = tasks or ['seg', 'depth']
         self.transform = transform
 
-        # Image directory
+        # Image directory — try 10k subset first, then 100k, then flat
         self.img_dir = os.path.join(root_dir, 'images', '10k', split)
+        if not os.path.exists(self.img_dir):
+            self.img_dir = os.path.join(root_dir, 'images', '100k', split)
         if not os.path.exists(self.img_dir):
             self.img_dir = os.path.join(root_dir, 'images', split)
 
