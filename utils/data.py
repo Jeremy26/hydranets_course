@@ -93,7 +93,7 @@ class BDD100KDataset(Dataset):
 
         # Load segmentation mask
         if 'seg' in self.tasks:
-            seg_path = os.path.join(self.seg_dir, basename + '.png')
+            seg_path = os.path.join(self.seg_dir, basename + '_train_id.png')
             if os.path.exists(seg_path):
                 seg = Image.open(seg_path)
                 seg = seg.resize((INPUT_SIZE[1], INPUT_SIZE[0]),
@@ -105,14 +105,12 @@ class BDD100KDataset(Dataset):
 
         # Load depth map
         if 'depth' in self.tasks:
-            depth_path = os.path.join(self.depth_dir, basename + '.npy')
+            depth_path = os.path.join(self.depth_dir, basename + '.jpg')
             if os.path.exists(depth_path):
-                depth = np.load(depth_path).astype(np.float32)
-                depth = torch.from_numpy(depth).unsqueeze(0)
-                depth = torch.nn.functional.interpolate(
-                    depth.unsqueeze(0), size=INPUT_SIZE, mode='bilinear',
-                    align_corners=False
-                ).squeeze(0)
+                depth = Image.open(depth_path).convert('L')
+                depth = depth.resize((INPUT_SIZE[1], INPUT_SIZE[0]), Image.BILINEAR)
+                depth = torch.from_numpy(np.array(depth, dtype=np.float32)).unsqueeze(0)
+                depth = depth / 255.0  # Normalize to [0, 1]
             else:
                 depth = torch.zeros((1, *INPUT_SIZE), dtype=torch.float32)
             sample['depth'] = depth
