@@ -48,11 +48,24 @@ class BDD100KDataset(Dataset):
         if not os.path.exists(self.img_dir):
             self.img_dir = os.path.join(root_dir, 'images', '100k', split)
 
-        # Collect image filenames
-        self.filenames = sorted([
+        # Collect image filenames — only keep images that have ALL requested labels
+        all_filenames = sorted([
             f for f in os.listdir(self.img_dir)
             if f.endswith(('.jpg', '.png'))
         ])
+        self.filenames = []
+        for f in all_filenames:
+            basename = os.path.splitext(f)[0]
+            keep = True
+            if 'seg' in self.tasks:
+                if not os.path.exists(os.path.join(self.seg_dir, basename + '_train_id.png')):
+                    keep = False
+            if 'depth' in self.tasks:
+                depth_path = os.path.join(self.depth_dir, basename + '.jpg')
+                if not os.path.exists(depth_path):
+                    keep = False
+            if keep:
+                self.filenames.append(f)
 
         # Segmentation mask directory
         if seg_root:
