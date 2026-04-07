@@ -12,6 +12,8 @@ Produces TWO clean zips ready to host on S3:
 Both share the same flat structure so notebooks work with either — just
 change the download URL.
 
+Full dataset (pre-built): https://drive.google.com/file/d/1tm41I4GvfmVxSxTFJEeoeKsn5RZ4eik7/view?usp=sharing
+
 Usage (on Colab):
     !pip install -q kaggle
     !kaggle datasets download -d solesensei/solesensei_bdd100k -p data/ --unzip
